@@ -20,7 +20,6 @@ package extension
 import akka.actor.{ Actor, ActorLogging, NoSerializationVerificationNeeded }
 import akka.persistence.inmemory.util.UUIDs
 import akka.persistence.query.{ NoOffset, Offset, Sequence, TimeBasedUUID }
-import akka.serialization.Serialization
 
 import scala.collection.immutable._
 
@@ -45,7 +44,7 @@ object InMemoryJournalStorage {
   case object ClearJournal extends ClearJournal with JournalCommand
 }
 
-class InMemoryJournalStorage(serialization: Serialization) extends Actor with ActorLogging {
+class InMemoryJournalStorage() extends Actor with ActorLogging {
   import InMemoryJournalStorage._
 
   var ordering: Long = 0L
@@ -85,6 +84,12 @@ class InMemoryJournalStorage(serialization: Serialization) extends Actor with Ac
     journal = newEntries.foldLeft(journal) {
       case (j, (persistenceId, entries)) => j + (persistenceId -> j.getOrElse(persistenceId, Vector.empty).++(entries))
     }
+
+    //    val newEntries: Seq[JournalEntry] = entries.map(_.copy(ordering = incrementAndGet))
+    //
+    //    entries.headOption.map(_.persistenceId).foreach { persistenceId =>
+    //      journal = journal + (persistenceId -> newEntries)
+    //    }
   }
 
   def deleteEntries(persistenceId: String, toSequenceNr: Long): Unit = {
@@ -100,7 +105,7 @@ class InMemoryJournalStorage(serialization: Serialization) extends Actor with Ac
     journal = journal + (persistenceId -> newEntries)
   }
 
-  def readEntries(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long, includeDeleted: Boolean): List[JournalEntry] = {
+  def getEntries(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long, includeDeleted: Boolean): List[JournalEntry] = {
 
     val allEntries: Iterator[JournalEntry] =
       journal.getOrElse(persistenceId, Vector.empty).iterator
@@ -127,7 +132,7 @@ class InMemoryJournalStorage(serialization: Serialization) extends Actor with Ac
     case GetEventsByTag(tag, offset)                                                  => sender() ! Success(getEventsByTag(tag, offset))
     case WriteEntries(entries)                                                        => sender() ! Success(writeEntries(entries))
     case DeleteEntries(persistenceId, toSequenceNr)                                   => sender() ! Success(deleteEntries(persistenceId, toSequenceNr))
-    case GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max, includeDeleted) => sender() ! Success(readEntries(persistenceId, fromSequenceNr, toSequenceNr, max, includeDeleted))
+    case GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max, includeDeleted) => sender() ! Success(getEntries(persistenceId, fromSequenceNr, toSequenceNr, max, includeDeleted))
     case ClearJournal                                                                 => sender() ! Success(clear())
   }
 }

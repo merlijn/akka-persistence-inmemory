@@ -12,6 +12,20 @@ object ProjectSettings extends AutoPlugin {
   override def requires = plugins.JvmPlugin && SbtScalariform
   override def trigger = allRequirements
 
+  lazy val librarySettings = Seq(
+    libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-actor" % AkkaVersion,
+      "com.typesafe.akka" %% "akka-persistence" % AkkaVersion,
+      "com.typesafe.akka" %% "akka-persistence-query-experimental" % AkkaVersion,
+      "com.typesafe.akka" %% "akka-stream" % AkkaVersion,
+      "ch.qos.logback" % "logback-classic" % LogbackVersion % Test,
+      "com.typesafe.akka" %% "akka-slf4j" % AkkaVersion % Test,
+      "com.github.pathikrit" %% "better-files" % "3.6.0",
+      "com.typesafe.akka" %% "akka-persistence-tck" % AkkaVersion % Test,
+      "com.typesafe.akka" %% "akka-stream-testkit" % AkkaVersion % Test,
+      "com.typesafe.akka" %% "akka-testkit" % AkkaVersion % Test,
+      "org.scalatest" %% "scalatest" % ScalaTestVersion % Test)
+  )
+
   override def projectSettings = Seq(
     name := "akka-persistence-inmemory",
     organization := "com.github.dnvriend",
@@ -27,18 +41,6 @@ object ProjectSettings extends AutoPlugin {
 
   ) ++ compilerSettings ++ scalariFormSettings ++ resolverSettings ++ librarySettings ++ testSettings
 
-  lazy val librarySettings = Seq(
-    libraryDependencies += "com.typesafe.akka" %% "akka-actor" % AkkaVersion,
-    libraryDependencies += "com.typesafe.akka" %% "akka-persistence" % AkkaVersion,
-    libraryDependencies += "com.typesafe.akka" %% "akka-persistence-query-experimental" % AkkaVersion,
-    libraryDependencies += "com.typesafe.akka" %% "akka-stream" % AkkaVersion,
-    libraryDependencies += "ch.qos.logback" % "logback-classic" % LogbackVersion % Test,
-    libraryDependencies += "com.typesafe.akka" %% "akka-slf4j" % AkkaVersion % Test,
-    libraryDependencies += "com.typesafe.akka" %% "akka-persistence-tck" % AkkaVersion % Test,
-    libraryDependencies += "com.typesafe.akka" %% "akka-stream-testkit" % AkkaVersion % Test,
-    libraryDependencies += "com.typesafe.akka" %% "akka-testkit" % AkkaVersion % Test,
-    libraryDependencies += "org.scalatest" %% "scalatest" % ScalaTestVersion % Test
-  )
 
   lazy val testSettings = Seq(
     fork in Test := true,
