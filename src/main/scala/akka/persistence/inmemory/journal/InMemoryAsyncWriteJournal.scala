@@ -46,24 +46,15 @@ class InMemoryAsyncWriteJournal(config: Config) extends AsyncWriteJournal {
 
   val journal: ActorRef = StorageExtension(system).journalStorage
 
-  private def serialize(persistentRepr: PersistentRepr): Try[(Array[Byte], Set[String])] = persistentRepr.payload match {
-    case Tagged(payload, tags) => serialization.serialize(persistentRepr.withPayload(payload)).map((_, tags))
-    case _                     => serialization.serialize(persistentRepr).map((_, Set.empty[String]))
-  }
-
-  private def translatePayload(persistentRepr: PersistentRepr): PersistentRepr = persistentRepr.payload match {
-    case Tagged(payload, _) => persistentRepr.withPayload(payload)
-    case _                  => persistentRepr
-  }
-
-  private def toJournalEntry(tuple: (Array[Byte], Set[String]), repr: PersistentRepr): JournalEntry = tuple match {
-    case (arr, tags) => JournalEntry(repr.persistenceId, repr.sequenceNr, arr, repr, tags)
+  private def serialize(persistentRepr: PersistentRepr): Try[Array[Byte]] = persistentRepr.payload match {
+    case Tagged(payload, _) => serialization.serialize(persistentRepr.withPayload(payload))
+    case _                  => serialization.serialize(persistentRepr)
   }
 
   def toJournalEntries(w: AtomicWrite): Try[List[JournalEntry]] = {
 
     val allResults: Seq[Try[JournalEntry]] = w.payload.map { repr =>
-      serialize(repr).map(toJournalEntry(_, translatePayload(repr)))
+      serialize(repr).map(bytes => JournalEntry(repr.persistenceId, repr.sequenceNr, bytes, repr.getTags))
     }
 
     allResults.collectFirst {

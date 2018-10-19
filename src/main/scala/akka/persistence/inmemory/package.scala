@@ -19,6 +19,7 @@ package akka.persistence
 import java.util.UUID
 
 import akka.persistence.inmemory.util.UUIDs
+import akka.persistence.journal.Tagged
 import akka.persistence.query.TimeBasedUUID
 
 import scala.collection.immutable._
@@ -31,11 +32,19 @@ package object inmemory {
   def nowUuid: UUID = UUIDs.timeBased()
   def getTimeBasedUUID: TimeBasedUUID = TimeBasedUUID(nowUuid)
 
+  implicit class PersistentReprAdditions(repr: PersistentRepr) {
+    def getTags: Set[String] = {
+      repr.payload match {
+        case Tagged(_, tags) => tags
+        case _               => Set.empty[String]
+      }
+    }
+  }
+
   final case class JournalEntry(
       persistenceId: String,
       sequenceNr: Long,
       serialized: Array[Byte],
-      repr: PersistentRepr,
       tags: Set[String],
       deleted: Boolean = false,
       ordering: Long = -1,

@@ -84,12 +84,6 @@ class InMemoryJournalStorage() extends Actor with ActorLogging {
     journal = newEntries.foldLeft(journal) {
       case (j, (persistenceId, entries)) => j + (persistenceId -> j.getOrElse(persistenceId, Vector.empty).++(entries))
     }
-
-    //    val newEntries: Seq[JournalEntry] = entries.map(_.copy(ordering = incrementAndGet))
-    //
-    //    entries.headOption.map(_.persistenceId).foreach { persistenceId =>
-    //      journal = journal + (persistenceId -> newEntries)
-    //    }
   }
 
   def deleteEntries(persistenceId: String, toSequenceNr: Long): Unit = {
