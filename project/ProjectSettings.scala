@@ -23,7 +23,7 @@ object ProjectSettings extends AutoPlugin {
     crossScalaVersions := Seq("2.11.11", "2.12.6"),
     crossVersion := CrossVersion.binary,
 
-    licenses := Seq(("Apache-2.0", new URL("https://www.apache.org/licenses/LICENSE-2.0.txt"))),
+    licenses := Seq(("Apache-2.0", new URL("https://www.apache.org/licenses/LICENSE-2.0.txt")))
 
   ) ++ compilerSettings ++ scalariFormSettings ++ resolverSettings ++ librarySettings ++ testSettings
 
@@ -32,13 +32,12 @@ object ProjectSettings extends AutoPlugin {
     libraryDependencies += "com.typesafe.akka" %% "akka-persistence" % AkkaVersion,
     libraryDependencies += "com.typesafe.akka" %% "akka-persistence-query-experimental" % AkkaVersion,
     libraryDependencies += "com.typesafe.akka" %% "akka-stream" % AkkaVersion,
-    libraryDependencies += "org.scalaz" %% "scalaz-core" % ScalazVersion,
     libraryDependencies += "ch.qos.logback" % "logback-classic" % LogbackVersion % Test,
     libraryDependencies += "com.typesafe.akka" %% "akka-slf4j" % AkkaVersion % Test,
     libraryDependencies += "com.typesafe.akka" %% "akka-persistence-tck" % AkkaVersion % Test,
     libraryDependencies += "com.typesafe.akka" %% "akka-stream-testkit" % AkkaVersion % Test,
     libraryDependencies += "com.typesafe.akka" %% "akka-testkit" % AkkaVersion % Test,
-    libraryDependencies += "org.scalatest" %% "scalatest" % ScalaTestVersion % Test,
+    libraryDependencies += "org.scalatest" %% "scalatest" % ScalaTestVersion % Test
   )
 
   lazy val testSettings = Seq(
@@ -46,7 +45,7 @@ object ProjectSettings extends AutoPlugin {
     logBuffered in Test := false,
     parallelExecution in Test := false,
     // show full stack traces and test case durations
-    testOptions in Test += Tests.Argument("-oDF"),
+    testOptions in Test += Tests.Argument("-oDF")
   )
 
   lazy val scalariFormSettings = Seq(

@@ -18,11 +18,11 @@ package akka.persistence.inmemory
 package extension
 
 import akka.actor.{ Actor, ActorLogging, ActorRef }
-import scalaz.std.AllInstances._
-import scalaz.syntax.all._
 
 object InMemorySnapshotStorage {
+
   sealed trait SnapshotCommand
+
   final case class Delete(persistenceId: String, sequenceNr: Long) extends SnapshotCommand
   final case class DeleteAllSnapshots(persistenceId: String) extends SnapshotCommand
   final case class DeleteUpToMaxSequenceNr(persistenceId: String, maxSequenceNr: Long) extends SnapshotCommand
@@ -53,9 +53,9 @@ class InMemorySnapshotStorage extends Actor with ActorLogging {
   }
 
   def delete(persistenceId: String, predicate: SnapshotEntry => Boolean): Unit = {
-    val pidEntries = snapshot.filter(_._1 == persistenceId)
-    val notDeleted = pidEntries.mapValues(_.filterNot(predicate))
-    snapshot = snapshot.filterNot(_._1 == persistenceId) |+| notDeleted
+    val newEntires = snapshot.getOrElse(persistenceId, Vector.empty).filterNot(predicate)
+
+    snapshot = snapshot + (persistenceId -> newEntires)
   }
 
   def delete(ref: ActorRef, persistenceId: String, sequenceNr: Long): Unit = {
@@ -92,8 +92,9 @@ class InMemorySnapshotStorage extends Actor with ActorLogging {
   }
 
   def save(ref: ActorRef, persistenceId: String, sequenceNr: Long, timestamp: Long, data: Array[Byte]): Unit = {
-    val key = persistenceId
-    snapshot = snapshot |+| Map(key -> Vector(SnapshotEntry(persistenceId, sequenceNr, timestamp, data)))
+    val entries = snapshot.getOrElse(persistenceId, Vector.empty) :+ SnapshotEntry(persistenceId, sequenceNr, timestamp, data)
+
+    snapshot = snapshot + (persistenceId -> entries)
 
     ref ! akka.actor.Status.Success("")
   }

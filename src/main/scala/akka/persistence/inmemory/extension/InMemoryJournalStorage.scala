@@ -17,16 +17,12 @@
 package akka.persistence.inmemory
 package extension
 
-import akka.actor.{ Actor, ActorLogging, ActorRef, NoSerializationVerificationNeeded }
-import akka.event.LoggingReceive
-import akka.persistence.PersistentRepr
+import akka.actor.{ Actor, ActorLogging, NoSerializationVerificationNeeded }
 import akka.persistence.inmemory.util.UUIDs
 import akka.persistence.query.{ NoOffset, Offset, Sequence, TimeBasedUUID }
 import akka.serialization.Serialization
 
 import scala.collection.immutable._
-import scalaz.syntax.semigroup._
-import scalaz.std.AllInstances._
 
 object InMemoryJournalStorage {
 
@@ -70,63 +66,52 @@ class InMemoryJournalStorage(serialization: Serialization) extends Actor with Ac
 
   def getEventsByTag(tag: String, offset: Offset): List[JournalEntry] = {
 
-    def increment(offset: Long): Long = offset + 1
-    def getByOffset(p: JournalEntry => Boolean): List[JournalEntry] = {
-      val xs = journal.values.flatten[JournalEntry].toVector
-        .filter(_.tags.contains(tag)).toList
-        .sortBy(_.ordering)
-        .zipWithIndex.map {
-          case (entry, index) =>
-            entry.copy(offset = Option(increment(index)))
-        }
-
-      xs.filter(p)
-    }
+    val entriesForTag = journal.values.flatten[JournalEntry].toVector
+      .filter(_.tags.contains(tag)).toList
+      .sortBy(_.ordering)
+      .zipWithIndex.map { case (entry, index) => entry.copy(offset = Option(index + 1)) }
 
     offset match {
-      case NoOffset             => getByOffset(_.offset.exists(_ >= 0L))
-      case Sequence(value)      => getByOffset(_.offset.exists(_ > value))
-      case value: TimeBasedUUID => getByOffset(p => UUIDs.TimeBasedUUIDOrdering.gt(p.timestamp, value))
+      case NoOffset             => entriesForTag.filter(_.offset.exists(_ >= 0L))
+      case Sequence(value)      => entriesForTag.filter(_.offset.exists(_ > value))
+      case value: TimeBasedUUID => entriesForTag.filter(p => UUIDs.TimeBasedUUIDOrdering.gt(p.timestamp, value))
     }
   }
 
   def writeEntries(entries: Seq[JournalEntry]): Unit = {
 
     val newEntries: Map[String, Seq[JournalEntry]] = entries.map(_.copy(ordering = incrementAndGet)).groupBy(_.persistenceId)
-    journal = journal |+| newEntries
+
+    journal = newEntries.foldLeft(journal) {
+      case (j, (persistenceId, entries)) => j + (persistenceId -> j.getOrElse(persistenceId, Vector.empty).++(entries))
+    }
   }
 
   def deleteEntries(persistenceId: String, toSequenceNr: Long): Unit = {
-    val pidEntries = journal.filter(_._1 == persistenceId)
-    val notDeleted = pidEntries.mapValues(_.filterNot(_.sequenceNr <= toSequenceNr))
 
-    val deleted = pidEntries
-      .mapValues(_.filter(_.sequenceNr <= toSequenceNr).map { journalEntry =>
-        val updatedRepr: PersistentRepr = journalEntry.repr.update(deleted = true)
-        val byteArray: Array[Byte] = serialization.serialize(updatedRepr) match {
-          case scala.util.Success(arr)   => arr
-          case scala.util.Failure(cause) => throw cause
-        }
-        journalEntry.copy(deleted = true).copy(serialized = byteArray).copy(repr = updatedRepr)
-      })
+    val newEntries: Vector[JournalEntry] =
+      journal.getOrElse(persistenceId, Vector.empty).map { e =>
+        if (e.sequenceNr <= toSequenceNr)
+          e.copy(deleted = true)
+        else
+          e
+      }
 
-    journal = journal - persistenceId |+| deleted |+| notDeleted
+    journal = journal + (persistenceId -> newEntries)
   }
 
   def readEntries(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long, includeDeleted: Boolean): List[JournalEntry] = {
 
-    val entries: Iterator[JournalEntry] =
-      journal.iterator
-        .filter { case (key, _) => key == persistenceId }
-        .flatMap { case (_, entries) => entries }
+    val allEntries: Iterator[JournalEntry] =
+      journal.getOrElse(persistenceId, Vector.empty).iterator
         .filter(_.sequenceNr >= fromSequenceNr)
         .filter(_.sequenceNr <= toSequenceNr)
 
-    val entriesNotDeleted = if (includeDeleted) entries else entries.filterNot(_.deleted)
+    val entries = if (includeDeleted) allEntries else allEntries.filterNot(_.deleted)
 
     val toTake = if (max >= Int.MaxValue) Int.MaxValue else max.toInt
 
-    entriesNotDeleted.toList.sortBy(_.sequenceNr) take (toTake)
+    entries.toList.sortBy(_.sequenceNr) take (toTake)
   }
 
   def clear(): Unit = {

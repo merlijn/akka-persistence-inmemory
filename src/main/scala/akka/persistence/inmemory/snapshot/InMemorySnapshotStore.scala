@@ -33,8 +33,6 @@ import com.typesafe.config.Config
 
 import scala.concurrent.duration._
 import scala.concurrent.{ ExecutionContext, Future }
-import scalaz.OptionT
-import scalaz.std.AllInstances._
 
 class InMemorySnapshotStore(config: Config) extends SnapshotStore {
   implicit val system: ActorSystem = context.system
@@ -45,10 +43,11 @@ class InMemorySnapshotStore(config: Config) extends SnapshotStore {
 
   val snapshots: ActorRef = StorageExtension(system).snapshotStorage
 
-  def deserialize(snapshotEntry: SnapshotEntry): Future[Option[Snapshot]] =
-    Future.fromTry(serialization.deserialize(snapshotEntry.snapshot, classOf[Snapshot])).map(Option(_))
+  def deserialize(snapshotEntry: SnapshotEntry): Option[Snapshot] =
+    serialization.deserialize(snapshotEntry.snapshot, classOf[Snapshot]).toOption
 
   override def loadAsync(persistenceId: String, criteria: SnapshotSelectionCriteria): Future[Option[SelectedSnapshot]] = {
+
     val maybeEntry: Future[Option[SnapshotEntry]] = criteria match {
       case SnapshotSelectionCriteria(Long.MaxValue, Long.MaxValue, _, _) =>
         (snapshots ? SnapshotForMaxSequenceNr(persistenceId, Long.MaxValue)).mapTo[Option[SnapshotEntry]]
@@ -61,12 +60,9 @@ class InMemorySnapshotStore(config: Config) extends SnapshotStore {
       case _ => Future.successful(None)
     }
 
-    val result = for {
-      entry <- OptionT(maybeEntry)
-      snapshot <- OptionT(deserialize(entry))
-    } yield SelectedSnapshot(SnapshotMetadata(entry.persistenceId, entry.sequenceNumber, entry.created), snapshot.data)
-
-    result.run
+    maybeEntry.map(
+      _.flatMap(entry => deserialize(entry).map(snapshot => SelectedSnapshot(SnapshotMetadata(entry.persistenceId, entry.sequenceNumber, entry.created), snapshot.data)))
+    )
   }
 
   override def saveAsync(metadata: SnapshotMetadata, snapshot: Any): Future[Unit] = for {
