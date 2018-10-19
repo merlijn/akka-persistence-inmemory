@@ -74,18 +74,18 @@ class InMemoryAsyncWriteJournal(config: Config) extends AsyncWriteJournal {
 
   override def asyncWriteMessages(messages: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] =
     Source(messages).via(serializer).mapAsync(1) {
-      case Success(xs)    => (journal ? InMemoryJournalStorage.WriteList(xs)).map(_ => Success(()))
+      case Success(xs)    => (journal ? InMemoryJournalStorage.WriteEntries(xs)).map(_ => Success(()))
       case Failure(cause) => Future.successful(Failure(cause))
     }.runWith(Sink.seq)
 
   override def asyncDeleteMessagesTo(persistenceId: String, toSequenceNr: Long): Future[Unit] =
-    (journal ? InMemoryJournalStorage.Delete(persistenceId, toSequenceNr)).map(_ => ())
+    (journal ? InMemoryJournalStorage.DeleteEntries(persistenceId, toSequenceNr)).map(_ => ())
 
   override def asyncReadHighestSequenceNr(persistenceId: String, fromSequenceNr: Long): Future[Long] =
-    (journal ? InMemoryJournalStorage.HighestSequenceNr(persistenceId, fromSequenceNr)).mapTo[Long]
+    (journal ? InMemoryJournalStorage.GetHighestSequenceNr(persistenceId, fromSequenceNr)).mapTo[Long]
 
   override def asyncReplayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(recoveryCallback: (PersistentRepr) => Unit): Future[Unit] =
-    Source.fromFuture((journal ? InMemoryJournalStorage.GetJournalEntriesExceptDeleted(persistenceId, fromSequenceNr, toSequenceNr, max)).mapTo[List[JournalEntry]])
+    Source.fromFuture((journal ? InMemoryJournalStorage.GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max, false)).mapTo[List[JournalEntry]])
       .mapConcat(identity)
       .via(deserialization)
       .runForeach(recoveryCallback)

@@ -18,7 +18,7 @@ package akka.persistence.inmemory.query
 
 import scala.concurrent.duration._
 
-class AllPersistenceIdsTest extends QueryTestSpec {
+class GetAllPersistenceIdsTest extends QueryTestSpec {
   it should "not terminate the stream when there are no pids" in
     withAllPersistenceIds() { tp =>
       tp.request(Long.MaxValue)

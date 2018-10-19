@@ -29,15 +29,16 @@ import scalaz.syntax.semigroup._
 import scalaz.std.AllInstances._
 
 object InMemoryJournalStorage {
+
   sealed trait JournalCommand extends NoSerializationVerificationNeeded
-  case object AllPersistenceIds extends JournalCommand
-  final case class HighestSequenceNr(persistenceId: String, fromSequenceNr: Long) extends JournalCommand
-  final case class EventsByTag(tag: String, offset: Offset) extends JournalCommand
-  final case class PersistenceIds(queryListOfPersistenceIds: Seq[String]) extends JournalCommand
-  final case class WriteList(xs: Seq[JournalEntry]) extends JournalCommand
-  final case class Delete(persistenceId: String, toSequenceNr: Long) extends JournalCommand
-  final case class GetJournalEntriesExceptDeleted(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long) extends JournalCommand
-  final case class GetAllJournalEntries(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long) extends JournalCommand
+
+  case object GetAllPersistenceIds extends JournalCommand
+
+  final case class GetHighestSequenceNr(persistenceId: String, fromSequenceNr: Long) extends JournalCommand
+  final case class GetEventsByTag(tag: String, offset: Offset) extends JournalCommand
+  final case class WriteEntries(entries: Seq[JournalEntry]) extends JournalCommand
+  final case class DeleteEntries(persistenceId: String, toSequenceNr: Long) extends JournalCommand
+  final case class GetEntries(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long, includeDeleted: Boolean) extends JournalCommand
 
   /**
    * Java API
@@ -46,14 +47,6 @@ object InMemoryJournalStorage {
 
   sealed abstract class ClearJournal
   case object ClearJournal extends ClearJournal with JournalCommand
-
-  def getPersistenceId(prod: (String, Vector[JournalEntry])): String = prod._1
-  def getEntries(prod: (String, Vector[JournalEntry])): Vector[JournalEntry] = prod._2
-  def getEventsByPid(pid: String, journal: Map[String, Vector[JournalEntry]]): Option[Vector[JournalEntry]] =
-    journal.find(_._1 == pid).map(_._2)
-  def getAllEvents(journal: Map[String, Vector[JournalEntry]]): Vector[JournalEntry] =
-    journal.values.flatten[JournalEntry].toVector
-  def getMaxSequenceNr(xs: Vector[JournalEntry]): Long = xs.map(_.sequenceNr).max
 }
 
 class InMemoryJournalStorage(serialization: Serialization) extends Actor with ActorLogging {
@@ -68,18 +61,18 @@ class InMemoryJournalStorage(serialization: Serialization) extends Actor with Ac
 
   var journal = Map.empty[String, Vector[JournalEntry]]
 
-  def allPersistenceIds(ref: ActorRef): Unit =
-    ref ! akka.actor.Status.Success(journal.keySet)
+  def getAllPersistenceIds(): Set[String] = journal.keySet
 
-  def highestSequenceNr(ref: ActorRef, persistenceId: String, fromSequenceNr: Long): Unit = {
-    val highestSequenceNrJournal = getEventsByPid(persistenceId, journal).map(getMaxSequenceNr).getOrElse(0L)
-    ref ! akka.actor.Status.Success(highestSequenceNrJournal)
-  }
+  def getHighestSequenceNr(persistenceId: String, fromSequenceNr: Long): Long =
+    journal.get(persistenceId)
+      .map(_.map(_.sequenceNr).max)
+      .getOrElse(0L)
 
-  def eventsByTag(ref: ActorRef, tag: String, offset: Offset): Unit = {
+  def getEventsByTag(tag: String, offset: Offset): List[JournalEntry] = {
+
     def increment(offset: Long): Long = offset + 1
     def getByOffset(p: JournalEntry => Boolean): List[JournalEntry] = {
-      val xs = getAllEvents(journal)
+      val xs = journal.values.flatten[JournalEntry].toVector
         .filter(_.tags.contains(tag)).toList
         .sortBy(_.ordering)
         .zipWithIndex.map {
@@ -90,23 +83,20 @@ class InMemoryJournalStorage(serialization: Serialization) extends Actor with Ac
       xs.filter(p)
     }
 
-    val xs: List[JournalEntry] = offset match {
+    offset match {
       case NoOffset             => getByOffset(_.offset.exists(_ >= 0L))
       case Sequence(value)      => getByOffset(_.offset.exists(_ > value))
       case value: TimeBasedUUID => getByOffset(p => UUIDs.TimeBasedUUIDOrdering.gt(p.timestamp, value))
     }
-
-    ref ! akka.actor.Status.Success(xs)
   }
 
-  def writelist(ref: ActorRef, xs: Seq[JournalEntry]): Unit = {
-    val ys = xs.map(_.copy(ordering = incrementAndGet)).groupBy(_.persistenceId)
-    journal = journal |+| ys
+  def writeEntries(entries: Seq[JournalEntry]): Unit = {
 
-    ref ! akka.actor.Status.Success(())
+    val newEntries: Map[String, Seq[JournalEntry]] = entries.map(_.copy(ordering = incrementAndGet)).groupBy(_.persistenceId)
+    journal = journal |+| newEntries
   }
 
-  def delete(ref: ActorRef, persistenceId: String, toSequenceNr: Long): Unit = {
+  def deleteEntries(persistenceId: String, toSequenceNr: Long): Unit = {
     val pidEntries = journal.filter(_._1 == persistenceId)
     val notDeleted = pidEntries.mapValues(_.filterNot(_.sequenceNr <= toSequenceNr))
 
@@ -120,41 +110,39 @@ class InMemoryJournalStorage(serialization: Serialization) extends Actor with Ac
         journalEntry.copy(deleted = true).copy(serialized = byteArray).copy(repr = updatedRepr)
       })
 
-    journal = journal.filterNot(_._1 == persistenceId) |+| deleted |+| notDeleted
-
-    ref ! akka.actor.Status.Success("")
+    journal = journal - persistenceId |+| deleted |+| notDeleted
   }
 
-  def messages(ref: ActorRef, persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long, all: Boolean): Unit = {
-    def toTake = if (max >= Int.MaxValue) Int.MaxValue else max.toInt
-    val pidEntries: Map[String, Vector[JournalEntry]] = journal.filter(_._1 == persistenceId)
-    val xs: List[JournalEntry] = pidEntries.flatMap(_._2)
-      .filter(_.sequenceNr >= fromSequenceNr)
-      .filter(_.sequenceNr <= toSequenceNr)
-      .toList.sortBy(_.sequenceNr)
+  def readEntries(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long, includeDeleted: Boolean): List[JournalEntry] = {
 
-    val ys = if (all) xs else xs.filterNot(_.deleted)
+    val entries: Iterator[JournalEntry] =
+      journal.iterator
+        .filter { case (key, _) => key == persistenceId }
+        .flatMap { case (_, entries) => entries }
+        .filter(_.sequenceNr >= fromSequenceNr)
+        .filter(_.sequenceNr <= toSequenceNr)
 
-    val zs = ys.take(toTake)
+    val entriesNotDeleted = if (includeDeleted) entries else entries.filterNot(_.deleted)
 
-    ref ! akka.actor.Status.Success(zs)
+    val toTake = if (max >= Int.MaxValue) Int.MaxValue else max.toInt
+
+    entriesNotDeleted.toList.sortBy(_.sequenceNr) take (toTake)
   }
 
-  def clear(ref: ActorRef): Unit = {
+  def clear(): Unit = {
     ordering = 0L
     journal = Map.empty[String, Vector[JournalEntry]]
-
-    ref ! akka.actor.Status.Success("")
   }
 
-  override def receive: Receive = LoggingReceive {
-    case AllPersistenceIds                                                                => allPersistenceIds(sender())
-    case HighestSequenceNr(persistenceId, fromSequenceNr)                                 => highestSequenceNr(sender(), persistenceId, fromSequenceNr)
-    case EventsByTag(tag, offset)                                                         => eventsByTag(sender(), tag, offset)
-    case WriteList(xs)                                                                    => writelist(sender(), xs)
-    case Delete(persistenceId, toSequenceNr)                                              => delete(sender(), persistenceId, toSequenceNr)
-    case GetJournalEntriesExceptDeleted(persistenceId, fromSequenceNr, toSequenceNr, max) => messages(sender(), persistenceId, fromSequenceNr, toSequenceNr, max, all = false)
-    case GetAllJournalEntries(persistenceId, fromSequenceNr, toSequenceNr, max)           => messages(sender(), persistenceId, fromSequenceNr, toSequenceNr, max, all = true)
-    case ClearJournal                                                                     => clear(sender())
+  import akka.actor.Status.Success
+
+  override def receive: Receive = {
+    case GetAllPersistenceIds                                                         => sender() ! Success(getAllPersistenceIds())
+    case GetHighestSequenceNr(persistenceId, fromSequenceNr)                          => sender() ! Success(getHighestSequenceNr(persistenceId, fromSequenceNr))
+    case GetEventsByTag(tag, offset)                                                  => sender() ! Success(getEventsByTag(tag, offset))
+    case WriteEntries(entries)                                                        => sender() ! Success(writeEntries(entries))
+    case DeleteEntries(persistenceId, toSequenceNr)                                   => sender() ! Success(deleteEntries(persistenceId, toSequenceNr))
+    case GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max, includeDeleted) => sender() ! Success(readEntries(persistenceId, fromSequenceNr, toSequenceNr, max, includeDeleted))
+    case ClearJournal                                                                 => sender() ! Success(clear())
   }
 }

@@ -83,7 +83,7 @@ class InMemoryReadJournal(config: Config, journal: ActorRef)(implicit val system
   )
 
   override def currentPersistenceIds(): Source[String, NotUsed] =
-    Source.fromFuture((journal ? InMemoryJournalStorage.AllPersistenceIds).mapTo[Set[String]])
+    Source.fromFuture((journal ? InMemoryJournalStorage.GetAllPersistenceIds).mapTo[Set[String]])
       .mapConcat(identity)
 
   override def allPersistenceIds(): Source[String, NotUsed] =
@@ -99,7 +99,7 @@ class InMemoryReadJournal(config: Config, journal: ActorRef)(implicit val system
       }
 
   override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, NotUsed] =
-    Source.fromFuture((journal ? InMemoryJournalStorage.GetJournalEntriesExceptDeleted(persistenceId, fromSequenceNr, toSequenceNr, Long.MaxValue))
+    Source.fromFuture((journal ? InMemoryJournalStorage.GetEntries(persistenceId, fromSequenceNr, toSequenceNr, Long.MaxValue, false))
       .mapTo[List[JournalEntry]])
       .mapConcat(identity)
       .via(deserialization)
@@ -127,7 +127,7 @@ class InMemoryReadJournal(config: Config, journal: ActorRef)(implicit val system
     currentEventsByTag(tag, Sequence(offset))
 
   override def currentEventsByTag(tag: String, offset: Offset): Source[EventEnvelope2, NotUsed] =
-    Source.fromFuture((journal ? InMemoryJournalStorage.EventsByTag(tag, offset))
+    Source.fromFuture((journal ? InMemoryJournalStorage.GetEventsByTag(tag, offset))
       .mapTo[List[JournalEntry]])
       .mapConcat(identity)
       .via(deserializationWithOffset(offset))
