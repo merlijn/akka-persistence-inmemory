@@ -47,13 +47,6 @@ object InMemoryJournalStorage {
 class InMemoryJournalStorage() extends Actor with ActorLogging {
   import InMemoryJournalStorage._
 
-  var ordering: Long = 0L
-
-  def incrementAndGet: Long = {
-    ordering += 1
-    ordering
-  }
-
   var journal = Map.empty[String, Vector[JournalEntry]]
 
   def getAllPersistenceIds(): Set[String] = journal.keySet
@@ -67,23 +60,21 @@ class InMemoryJournalStorage() extends Actor with ActorLogging {
 
     val entriesForTag = journal.values.flatten[JournalEntry].toVector
       .filter(_.tags.contains(tag)).toList
-      .sortBy(_.ordering)
+      .sortBy(_.timestamp)
       .zipWithIndex.map { case (entry, index) => entry.copy(offset = Option(index + 1)) }
 
     offset match {
-      case NoOffset             => entriesForTag.filter(_.offset.exists(_ >= 0L))
-      case Sequence(value)      => entriesForTag.filter(_.offset.exists(_ > value))
+      case NoOffset             => entriesForTag
+      case Sequence(value)      => entriesForTag.drop(value.toInt)
       case value: TimeBasedUUID => entriesForTag.filter(p => UUIDs.TimeBasedUUIDOrdering.gt(p.timestamp, value))
     }
   }
 
   def writeEntries(entries: Seq[JournalEntry]): Unit = {
 
-    val newEntries: Map[String, Seq[JournalEntry]] = entries.map(_.copy(ordering = incrementAndGet)).groupBy(_.persistenceId)
+    val persistenceId = entries.head.persistenceId
 
-    journal = newEntries.foldLeft(journal) {
-      case (j, (persistenceId, entries)) => j + (persistenceId -> j.getOrElse(persistenceId, Vector.empty).++(entries))
-    }
+    journal = journal + (persistenceId -> journal.getOrElse(persistenceId, Vector.empty).++(entries))
   }
 
   def deleteEntries(persistenceId: String, toSequenceNr: Long): Unit = {
@@ -107,13 +98,12 @@ class InMemoryJournalStorage() extends Actor with ActorLogging {
         .filter(_.sequenceNr <= toSequenceNr)
         .filterNot(_.deleted)
 
-    val toTake = if (max >= Int.MaxValue) Int.MaxValue else max.toInt
+    val toTake: Long = Math.min(Int.MaxValue, max)
 
-    entries.toList.sortBy(_.sequenceNr) take (toTake)
+    entries.toList.sortBy(_.sequenceNr) take (toTake.toInt)
   }
 
   def clear(): Unit = {
-    ordering = 0L
     journal = Map.empty[String, Vector[JournalEntry]]
   }
 

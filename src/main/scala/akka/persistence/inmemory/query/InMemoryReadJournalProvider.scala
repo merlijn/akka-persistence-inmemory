@@ -23,7 +23,7 @@ import com.typesafe.config.Config
 
 class InMemoryReadJournalProvider(system: ExtendedActorSystem, config: Config) extends ReadJournalProvider {
 
-  override def scaladslReadJournal() = new scaladsl.InMemoryReadJournal(config, StorageExtension(system).journalStorage)(system)
+  override def scaladslReadJournal(): scaladsl.InMemoryReadJournal = new scaladsl.InMemoryReadJournal(config, StorageExtension(system).journalStorage)(system)
 
-  override def javadslReadJournal() = new javadsl.InMemoryReadJournal(scaladslReadJournal())
+  override def javadslReadJournal(): javadsl.InMemoryReadJournal = new javadsl.InMemoryReadJournal(scaladslReadJournal())
 }

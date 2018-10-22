@@ -20,6 +20,7 @@ import akka.actor._
 import akka.serialization.SerializationExtension
 
 object StorageExtension extends ExtensionId[StorageExtensionImpl] with ExtensionIdProvider {
+
   override def createExtension(system: ExtendedActorSystem): StorageExtensionImpl = new StorageExtensionImpl()(system)
 
   override def lookup(): ExtensionId[_ <: Extension] = StorageExtension
@@ -27,7 +28,7 @@ object StorageExtension extends ExtensionId[StorageExtensionImpl] with Extension
   /**
    * Java API
    */
-  override def get(as: ActorSystem): StorageExtensionImpl = apply(as)
+  override def get(actorSystem: ActorSystem): StorageExtensionImpl = apply(actorSystem)
 }
 
 class StorageExtensionImpl()(implicit val system: ExtendedActorSystem) extends Extension {
