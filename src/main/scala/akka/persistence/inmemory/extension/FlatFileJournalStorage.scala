@@ -22,7 +22,6 @@ import akka.persistence.query.Offset
 
 import scala.collection.immutable._
 import better.files._
-import File._
 
 class FlatFileJournalStorage extends Actor with ActorLogging {
 
@@ -63,7 +62,7 @@ class FlatFileJournalStorage extends Actor with ActorLogging {
 
   }
 
-  def getEntries(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long, includeDeleted: Boolean): List[JournalEntry] = {
+  def getEntries(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long): List[JournalEntry] = {
 
     List.empty
   }
@@ -75,12 +74,12 @@ class FlatFileJournalStorage extends Actor with ActorLogging {
   import akka.actor.Status.Success
 
   override def receive: Receive = {
-    case GetAllPersistenceIds                                                         => sender() ! Success(getAllPersistenceIds())
-    case GetHighestSequenceNr(persistenceId, fromSequenceNr)                          => sender() ! Success(getHighestSequenceNr(persistenceId, fromSequenceNr))
-    case GetEventsByTag(tag, offset)                                                  => sender() ! Success(getEventsByTag(tag, offset))
-    case WriteEntries(entries)                                                        => sender() ! Success(writeEntries(entries))
-    case DeleteEntries(persistenceId, toSequenceNr)                                   => sender() ! Success(deleteEntries(persistenceId, toSequenceNr))
-    case GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max, includeDeleted) => sender() ! Success(getEntries(persistenceId, fromSequenceNr, toSequenceNr, max, includeDeleted))
-    case ClearJournal                                                                 => sender() ! Success(clear())
+    case GetAllPersistenceIds                                         => sender() ! Success(getAllPersistenceIds())
+    case GetHighestSequenceNr(persistenceId, fromSequenceNr)          => sender() ! Success(getHighestSequenceNr(persistenceId, fromSequenceNr))
+    case GetEventsByTag(tag, offset)                                  => sender() ! Success(getEventsByTag(tag, offset))
+    case WriteEntries(entries)                                        => sender() ! Success(writeEntries(entries))
+    case DeleteEntries(persistenceId, toSequenceNr)                   => sender() ! Success(deleteEntries(persistenceId, toSequenceNr))
+    case GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max) => sender() ! Success(getEntries(persistenceId, fromSequenceNr, toSequenceNr, max))
+    case ClearJournal                                                 => sender() ! Success(clear())
   }
 }

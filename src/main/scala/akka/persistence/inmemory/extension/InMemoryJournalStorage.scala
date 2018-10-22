@@ -33,7 +33,7 @@ object InMemoryJournalStorage {
   final case class GetEventsByTag(tag: String, offset: Offset) extends JournalCommand
   final case class WriteEntries(entries: Seq[JournalEntry]) extends JournalCommand
   final case class DeleteEntries(persistenceId: String, toSequenceNr: Long) extends JournalCommand
-  final case class GetEntries(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long, includeDeleted: Boolean) extends JournalCommand
+  final case class GetEntries(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long) extends JournalCommand
 
   /**
    * Java API
@@ -99,14 +99,13 @@ class InMemoryJournalStorage() extends Actor with ActorLogging {
     journal = journal + (persistenceId -> newEntries)
   }
 
-  def getEntries(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long, includeDeleted: Boolean): List[JournalEntry] = {
+  def getEntries(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long): List[JournalEntry] = {
 
-    val allEntries: Iterator[JournalEntry] =
+    val entries: Iterator[JournalEntry] =
       journal.getOrElse(persistenceId, Vector.empty).iterator
         .filter(_.sequenceNr >= fromSequenceNr)
         .filter(_.sequenceNr <= toSequenceNr)
-
-    val entries = if (includeDeleted) allEntries else allEntries.filterNot(_.deleted)
+        .filterNot(_.deleted)
 
     val toTake = if (max >= Int.MaxValue) Int.MaxValue else max.toInt
 
@@ -121,12 +120,12 @@ class InMemoryJournalStorage() extends Actor with ActorLogging {
   import akka.actor.Status.Success
 
   override def receive: Receive = {
-    case GetAllPersistenceIds                                                         => sender() ! Success(getAllPersistenceIds())
-    case GetHighestSequenceNr(persistenceId, fromSequenceNr)                          => sender() ! Success(getHighestSequenceNr(persistenceId, fromSequenceNr))
-    case GetEventsByTag(tag, offset)                                                  => sender() ! Success(getEventsByTag(tag, offset))
-    case WriteEntries(entries)                                                        => sender() ! Success(writeEntries(entries))
-    case DeleteEntries(persistenceId, toSequenceNr)                                   => sender() ! Success(deleteEntries(persistenceId, toSequenceNr))
-    case GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max, includeDeleted) => sender() ! Success(getEntries(persistenceId, fromSequenceNr, toSequenceNr, max, includeDeleted))
-    case ClearJournal                                                                 => sender() ! Success(clear())
+    case GetAllPersistenceIds                                         => sender() ! Success(getAllPersistenceIds())
+    case GetHighestSequenceNr(persistenceId, fromSequenceNr)          => sender() ! Success(getHighestSequenceNr(persistenceId, fromSequenceNr))
+    case GetEventsByTag(tag, offset)                                  => sender() ! Success(getEventsByTag(tag, offset))
+    case WriteEntries(entries)                                        => sender() ! Success(writeEntries(entries))
+    case DeleteEntries(persistenceId, toSequenceNr)                   => sender() ! Success(deleteEntries(persistenceId, toSequenceNr))
+    case GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max) => sender() ! Success(getEntries(persistenceId, fromSequenceNr, toSequenceNr, max))
+    case ClearJournal                                                 => sender() ! Success(clear())
   }
 }

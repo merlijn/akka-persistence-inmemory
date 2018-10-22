@@ -60,10 +60,10 @@ class InMemoryAsyncWriteJournal(config: Config) extends AsyncWriteJournal {
     allResults.collectFirst {
       case Failure(exception) => exception
     } match {
-      case Some(exception) => Failure(exception)
-      case None => Success(allResults.collect {
-        case Success(seq) => seq
-      }.toList)
+      case Some(exception) =>
+        exception.printStackTrace()
+        Failure(exception)
+      case None => Success(allResults.collect { case Success(seq) => seq }.toList)
     }
   }
 
@@ -91,7 +91,7 @@ class InMemoryAsyncWriteJournal(config: Config) extends AsyncWriteJournal {
     (journal ? InMemoryJournalStorage.GetHighestSequenceNr(persistenceId, fromSequenceNr)).mapTo[Long]
 
   override def asyncReplayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(recoveryCallback: (PersistentRepr) => Unit): Future[Unit] =
-    Source.fromFuture((journal ? InMemoryJournalStorage.GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max, false)).mapTo[List[JournalEntry]])
+    Source.fromFuture((journal ? InMemoryJournalStorage.GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max)).mapTo[List[JournalEntry]])
       .mapConcat(identity)
       .via(deserialization)
       .runForeach(recoveryCallback)

@@ -99,7 +99,7 @@ class InMemoryReadJournal(config: Config, journal: ActorRef)(implicit val system
       }
 
   override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, NotUsed] =
-    Source.fromFuture((journal ? InMemoryJournalStorage.GetEntries(persistenceId, fromSequenceNr, toSequenceNr, Long.MaxValue, false))
+    Source.fromFuture((journal ? InMemoryJournalStorage.GetEntries(persistenceId, fromSequenceNr, toSequenceNr, Long.MaxValue))
       .mapTo[List[JournalEntry]])
       .mapConcat(identity)
       .via(deserialization)
