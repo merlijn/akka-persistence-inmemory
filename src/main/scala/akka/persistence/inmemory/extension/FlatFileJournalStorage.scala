@@ -49,7 +49,7 @@ class FlatFileJournalStorage extends Actor with ActorLogging {
         val persistenceId = e.persistenceId
 
         val index = (journalDir / s"$persistenceId.index").createFileIfNotExists()
-        val journal = (journalDir / persistenceId).createFileIfNotExists()
+        val journal = (journalDir / s"$persistenceId.store").createFileIfNotExists()
 
         entries.foreach { entry =>
           index.appendLine(s"${entry.sequenceNr},${entry.serialized.length}")

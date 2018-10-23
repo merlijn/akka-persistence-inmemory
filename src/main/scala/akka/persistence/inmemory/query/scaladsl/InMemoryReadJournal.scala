@@ -162,10 +162,10 @@ class InMemoryReadJournal(config: Config, journal: ActorRef)(implicit val system
   private def deserialize(serialized: Array[Byte]) =
     Source.fromFuture(Future.fromTry(serialization.deserialize(serialized, classOf[PersistentRepr])))
 
-  private val deserialization = Flow[JournalEntry]
-    .flatMapConcat(deserializeJournalEntry)
+  private val deserialization = Flow[JournalEntry].flatMapConcat(deserializeJournalEntry)
 
-  private def adaptFromJournal(repr: PersistentRepr): Seq[PersistentRepr] =
+  // this applies the event adapters
+  private def applyEventAdapters(repr: PersistentRepr): Seq[PersistentRepr] =
     eventAdapters
       .get(repr.payload.getClass)
       .fromJournal(repr.payload, repr.manifest)
@@ -173,7 +173,7 @@ class InMemoryReadJournal(config: Config, journal: ActorRef)(implicit val system
       .map(adaptedPayload => repr.withPayload(adaptedPayload))
 
   private def deserializeJournalEntry(entry: JournalEntry): Source[PersistentRepr, NotUsed] =
-    deserialize(entry.serialized).map(_.update(deleted = entry.deleted)).mapConcat(adaptFromJournal)
+    deserialize(entry.serialized).map(_.update(deleted = entry.deleted)).mapConcat(applyEventAdapters)
 
   def determineOffset(offset: Offset, entry: JournalEntry): Offset = {
     def sequence = Sequence(entry.offset.getOrElse(throw new IllegalStateException("No offset in stream")))
@@ -186,7 +186,5 @@ class InMemoryReadJournal(config: Config, journal: ActorRef)(implicit val system
   }
 
   private def deserializationWithOffset(offset: Offset): Flow[JournalEntry, (Offset, PersistentRepr), NotUsed] = Flow[JournalEntry]
-    .flatMapConcat(entry =>
-      deserializeJournalEntry(entry)
-        .map(repr => (determineOffset(offset, entry), repr)))
+    .flatMapConcat(entry => deserializeJournalEntry(entry).map(repr => (determineOffset(offset, entry), repr)))
 }

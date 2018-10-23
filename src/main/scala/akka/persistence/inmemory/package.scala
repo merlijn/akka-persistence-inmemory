@@ -47,7 +47,6 @@ package object inmemory {
       serialized: Array[Byte],
       tags: Set[String],
       deleted: Boolean = false,
-      ordering: Long = -1,
       timestamp: TimeBasedUUID = getTimeBasedUUID,
       offset: Option[Long] = None)
 

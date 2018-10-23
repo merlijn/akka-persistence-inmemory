@@ -60,16 +60,12 @@ class InMemoryAsyncWriteJournal(config: Config) extends AsyncWriteJournal {
     allResults.collectFirst {
       case Failure(exception) => exception
     } match {
-      case Some(exception) =>
-        exception.printStackTrace()
-        Failure(exception)
-      case None => Success(allResults.collect { case Success(seq) => seq }.toList)
+      case Some(exception) => Failure(exception)
+      case None            => Success(allResults.collect { case Success(seq) => seq }.toList)
     }
   }
 
   override def asyncWriteMessages(messages: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] = {
-
-    // note; AtomicWrite guarantees that it is concerning the same persistence id
 
     def writeEntries(entries: List[JournalEntry]): Future[Try[Unit]] = (journal ? InMemoryJournalStorage.WriteEntries(entries)).map(_ => Success(()))
 
@@ -77,7 +73,7 @@ class InMemoryAsyncWriteJournal(config: Config) extends AsyncWriteJournal {
 
       toJournalEntries(write) match {
         case Success(entries)   => writeEntries(entries)
-        case Failure(exception) => Future.failed(exception)
+        case Failure(exception) => Future.successful(Failure(exception))
       }
     }
 
@@ -90,15 +86,16 @@ class InMemoryAsyncWriteJournal(config: Config) extends AsyncWriteJournal {
   override def asyncReadHighestSequenceNr(persistenceId: String, fromSequenceNr: Long): Future[Long] =
     (journal ? InMemoryJournalStorage.GetHighestSequenceNr(persistenceId, fromSequenceNr)).mapTo[Long]
 
-  override def asyncReplayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(recoveryCallback: (PersistentRepr) => Unit): Future[Unit] =
-    Source.fromFuture((journal ? InMemoryJournalStorage.GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max)).mapTo[List[JournalEntry]])
-      .mapConcat(identity)
-      .via(deserialization)
-      .runForeach(recoveryCallback)
-      .map(_ => ())
+  override def asyncReplayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(recoveryCallback: (PersistentRepr) => Unit): Future[Unit] = {
 
-  private val deserialization = Flow[JournalEntry].flatMapConcat { entry =>
-    Source.fromFuture(Future.fromTry(serialization.deserialize(entry.serialized, classOf[PersistentRepr])))
-      .map(_.update(deleted = entry.deleted))
+    val future = (journal ? InMemoryJournalStorage.GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max)).mapTo[List[JournalEntry]]
+
+    future.map { _.foreach { entry =>
+        val repr = serialization.deserialize(entry.serialized, classOf[PersistentRepr])
+          .map(_.update(deleted = entry.deleted))
+          .get
+        recoveryCallback(repr)
+      }
+    }
   }
 }
