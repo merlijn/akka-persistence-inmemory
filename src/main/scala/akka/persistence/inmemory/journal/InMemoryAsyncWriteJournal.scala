@@ -90,7 +90,8 @@ class InMemoryAsyncWriteJournal(config: Config) extends AsyncWriteJournal {
 
     val future = (journal ? InMemoryJournalStorage.GetEntries(persistenceId, fromSequenceNr, toSequenceNr, max)).mapTo[List[JournalEntry]]
 
-    future.map { _.foreach { entry =>
+    future.map {
+      _.foreach { entry =>
         val repr = serialization.deserialize(entry.serialized, classOf[PersistentRepr])
           .map(_.update(deleted = entry.deleted))
           .get

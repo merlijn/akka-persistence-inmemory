@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+import "scalapb/scalapb.proto";
+
+option java_package = "akka.persistence.inmemory.protobuf";
+option (scalapb.options) = {
+    flat_package: true
+};
+
+message Payload {
+    int32 serializer_id = 1;
+    string manifest = 2;
+    bytes data = 3;
+}
+
+message JournalEntry {
+    string manfest = 1;
+    string writerUuid = 2;
+    Payload payload = 3;
+}
