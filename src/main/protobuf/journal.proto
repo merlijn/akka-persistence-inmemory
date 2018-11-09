@@ -14,7 +14,7 @@ message Payload {
 }
 
 message JournalEntry {
-    string manfest = 1;
+    string manifest = 1;
     string writerUuid = 2;
     Payload payload = 3;
 }
