@@ -1,19 +1,48 @@
 import sbt._
 import sbt.Keys._
-import scalariform.formatter.preferences._
-import com.typesafe.sbt.SbtScalariform
 import sbtprotoc.ProtocPlugin.autoImport.PB
 
 object ProjectSettings extends AutoPlugin {
+
   final val AkkaVersion = "2.4.20"
   final val ScalazVersion = "7.2.17"
   final val ScalaTestVersion = "3.0.4"
   final val LogbackVersion = "1.2.3"
 
-  override def requires = plugins.JvmPlugin && SbtScalariform
+  override def requires = plugins.JvmPlugin
   override def trigger = allRequirements
 
   val scalapbVersion = scalapb.compiler.Version.scalapbVersion
+
+  lazy val testSettings = Seq(
+    fork in Test := true,
+    logBuffered in Test := false,
+    parallelExecution in Test := false,
+    // show full stack traces and test case durations
+    testOptions in Test += Tests.Argument("-oDF")
+  )
+
+  lazy val resolverSettings = Seq(
+    resolvers += Resolver.sonatypeRepo("public"),
+    resolvers += Resolver.typesafeRepo("releases"),
+    resolvers += Resolver.jcenterRepo
+  )
+
+  lazy val compilerSettings = Seq(
+    scalacOptions ++= Seq(
+      "-encoding",
+      "UTF-8",
+      "-deprecation",
+      "-feature",
+      "-unchecked",
+      "-Xlog-reflective-calls",
+      "-language:higherKinds",
+      "-language:implicitConversions",
+      "-Ypartial-unification",
+      "-target:jvm-1.8",
+      "-Ydelambdafy:method"
+    )
+  )
 
   lazy val scalaPBSettings = Seq(PB.targets in Compile := Seq(scalapb.gen() -> (sourceManaged in Compile).value))
 
@@ -46,46 +75,5 @@ object ProjectSettings extends AutoPlugin {
 
     licenses := Seq(("Apache-2.0", new URL("https://www.apache.org/licenses/LICENSE-2.0.txt")))
 
-  ) ++ compilerSettings ++ scalariFormSettings ++ resolverSettings ++ librarySettings ++ testSettings ++ scalaPBSettings
-
-
-  lazy val testSettings = Seq(
-    fork in Test := true,
-    logBuffered in Test := false,
-    parallelExecution in Test := false,
-    // show full stack traces and test case durations
-    testOptions in Test += Tests.Argument("-oDF")
-  )
-
-  lazy val scalariFormSettings = Seq(
-    SbtScalariform.autoImport.scalariformPreferences := {
-      SbtScalariform.autoImport.scalariformPreferences.value
-        .setPreference(AlignSingleLineCaseStatements, true)
-        .setPreference(AlignSingleLineCaseStatements.MaxArrowIndent, 100)
-        .setPreference(DoubleIndentConstructorArguments, true)
-        .setPreference(DanglingCloseParenthesis, Preserve)
-    }
-  )
-
-  lazy val resolverSettings = Seq(
-    resolvers += Resolver.sonatypeRepo("public"),
-    resolvers += Resolver.typesafeRepo("releases"),
-    resolvers += Resolver.jcenterRepo,
-  )
-
-  lazy val compilerSettings = Seq(
-    scalacOptions ++= Seq(
-      "-encoding",
-      "UTF-8",
-      "-deprecation",
-      "-feature",
-      "-unchecked",
-      "-Xlog-reflective-calls",
-      "-language:higherKinds",
-      "-language:implicitConversions",
-      "-Ypartial-unification",
-      "-target:jvm-1.8",
-      "-Ydelambdafy:method"
-    )
-  )
+  ) ++ compilerSettings ++ resolverSettings ++ librarySettings ++ testSettings ++ scalaPBSettings
 }
